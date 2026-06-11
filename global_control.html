@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Ngapo Home Smart • Remote Control</title>
+    <!-- MQTT over WebSocket -->
+    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 25px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            background: linear-gradient(135deg, #fff, #4CAF50);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #a0a0c0;
+            margin-bottom: 15px;
+        }
+
+        /* Connection Panel */
+        .connection-panel {
+            background: rgba(0,0,0,0.5);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(76,175,80,0.3);
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .led-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #555;
+            transition: all 0.3s;
+        }
+
+        .led-indicator.connected {
+            background: #4CAF50;
+            box-shadow: 0 0 10px #4CAF50;
+            animation: pulse 2s infinite;
+        }
+
+        .led-indicator.disconnected {
+            background: #f44336;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Grid */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+
+        /* Cards */
+        .card {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .card-title {
+            font-size: 1.2em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(76,175,80,0.5);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Motion Display */
+        .motion-container {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .motion-icon {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 20px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .motion-icon.detected {
+            background: rgba(244,67,54,0.3);
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+
+        .motion-text {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .motion-text.detected { color: #f44336; }
+        .motion-text.clear { color: #4CAF50; }
+
+        .last-motion {
+            margin-top: 15px;
+            font-size: 0.85em;
+            color: #a0a0c0;
+        }
+
+        /* Button Controls */
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(76,175,80,0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f44336, #da190b);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(244,67,54,0.4);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #ff9800, #e68900);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            transform: scale(1.02);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            color: white;
+        }
+
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-item {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            color: #a0a0c0;
+            margin-top: 5px;
+        }
+
+        /* LED Display */
+        .led-display {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+
+        .led-bulb {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #333;
+            transition: all 0.3s;
+        }
+
+        .led-bulb.on {
+            background: #4CAF50;
+            box-shadow: 0 0 20px #4CAF50;
+        }
+
+        /* Clients Table */
+        .clients-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .clients-table th,
+        .clients-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .clients-table th {
+            color: #4CAF50;
+            font-size: 0.85em;
+        }
+
+        .client-count-badge {
+            font-size: 2em;
+            font-weight: bold;
+            color: #4CAF50;
+            text-align: center;
+            margin: 10px 0;
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 25px;
+            margin-top: 30px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            font-size: 0.85em;
+            color: #a0a0c0;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 { font-size: 1.8em; }
+            .grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .button-group { flex-direction: column; }
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #4CAF50;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Device Info */
+        .device-info {
+            font-family: monospace;
+            font-size: 12px;
+            color: #4CAF50;
+            margin-top: 10px;
+            padding: 8px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏠 Ngapo Home Smart</h1>
+            <p>Remote Control • Anywhere in the World • Real-time Updates</p>
+        </div>
+
+        <!-- Connection Panel -->
+        <div class="connection-panel">
+            <div class="connection-status">
+                <div class="status-indicator">
+                    <div class="led-indicator" id="mqttLed"></div>
+                    <span id="mqttStatus">Connecting to MQTT Cloud...</span>
+                </div>
+                <div class="status-indicator">
+                    <div class="led-indicator" id="deviceLed"></div>
+                    <span id="deviceStatus">Waiting for ESP data...</span>
+                </div>
+                <button class="btn-secondary" onclick="refreshStatus()" style="padding: 8px 15px; font-size: 12px;">🔄 Refresh</button>
+            </div>
+            <div class="device-info" id="deviceInfo">
+                🔍 Searching for device...
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- Motion Detection Card -->
+            <div class="card">
+                <div class="card-title">
+                    <span>🔴</span> Motion Detection
+                </div>
+                <div class="motion-container">
+                    <div class="motion-icon" id="motionIcon">
+                        <svg width="60" height="60" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7zM9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1z"/>
+                        </svg>
+                    </div>
+                    <div class="motion-text" id="motionText">No Motion</div>
+                    <div class="last-motion" id="lastMotionTime">Waiting for data...</div>
+                </div>
+            </div>
+
+            <!-- Control Panel Card -->
+            <div class="card">
+                <div class="card-title">
+                    <span>🎮</span> Remote Control
+                </div>
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="sendCommand('alarm_on')">🔔 Test Alarm</button>
+                    <button class="btn btn-danger" onclick="sendCommand('alarm_off')">🔕 Stop Alarm</button>
+                </div>
+                <div class="button-group">
+                    <button class="btn btn-warning" onclick="sendCommand('led_on')">💡 Turn LED ON</button>
+                    <button class="btn btn-warning" onclick="sendCommand('led_off')">⚫ Turn LED OFF</button>
+                </div>
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="sendCommand('status')">📊 Get Status</button>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="alarmCount">0</div>
+                        <div class="stat-label">Total Alarms</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="uptime">0h</div>
+                        <div class="stat-label">ESP Uptime</div>
+                    </div>
+                </div>
+                <div class="led-display">
+                    <span>💡 ESP8266 LED Status</span>
+                    <div class="led-bulb" id="ledBulb"></div>
+                </div>
+            </div>
+
+            <!-- Connected Devices Card -->
+            <div class="card">
+                <div class="card-title">
+                    <span>📱</span> Connected Devices (Local AP)
+                </div>
+                <div class="client-count-badge" id="clientCount">0</div>
+                <table class="clients-table">
+                    <thead>
+                        <tr><th>IP Address</th><th>Connected Since</th></tr>
+                    </thead>
+                    <tbody id="clientsBody">
+                        <tr><td colspan="2" style="text-align:center;">No devices connected</td></tr>
+                    </tbody>
+                </table>
+                <div class="stats-grid" style="margin-top:15px">
+                    <div class="stat-item">
+                        <div class="stat-value" id="freeHeap">0</div>
+                        <div class="stat-label">Free Memory (KB)</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="deviceId">--</div>
+                        <div class="stat-label">Device ID</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>🔐 Secure MQTT via HiveMQ Cloud • Real-time Updates via WebSocket</p>
+            <p>📍 Last update: <span id="lastUpdate">--:--:--</span> | Status: <span id="globalStatus">Active</span></p>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // MQTT CONFIGURATION - MODIFY WITH YOUR HIVEMQ CREDENTIALS
+        // ============================================================
+        const MQTT_CONFIG = {
+            // WebSocket URL for HiveMQ Cloud (port 8884 for WSS)
+            broker: "wss://navysweat-c1aa1d92.a03.euc1.aws.hivemq.cloud:8884/mqtt",
+            username: "ngabo",
+            password: "Ngapo2004"
+        };
+
+        // MQTT Topics
+        const TOPICS = {
+            status: "ngapo/smart/status",
+            motion: "ngapo/smart/motion",
+            alarm: "ngapo/smart/alarm",
+            command: "ngapo/smart/command",
+            clients: "ngapo/smart/clients"
+        };
+
+        // Global variables
+        let client = null;
+        let isConnected = false;
+        let deviceId = "Unknown";
+        let lastMotionTime = null;
+        let alarmCount = 0;
+
+        // ============================================================
+        // MQTT Connection
+        // ============================================================
+        function connectMQTT() {
+            const options = {
+                username: MQTT_CONFIG.username,
+                password: MQTT_CONFIG.password,
+                clean: true,
+                reconnectPeriod: 5000,
+                connectTimeout: 30000,
+                keepalive: 60,
+                clientId: "web_client_" + Math.random().toString(16).substr(2, 8)
+            };
+
+            console.log("Connecting to MQTT broker...");
+            updateMQTTStatus(false, "Connecting...");
+
+            client = mqtt.connect(MQTT_CONFIG.broker, options);
+
+            client.on('connect', () => {
+                console.log("✅ MQTT Connected!");
+                isConnected = true;
+                updateMQTTStatus(true, "Connected to HiveMQ Cloud");
+                showToast("Connected to HiveMQ Cloud!", "success");
+                
+                // Subscribe to topics
+                client.subscribe(TOPICS.status);
+                client.subscribe(TOPICS.motion);
+                client.subscribe(TOPICS.alarm);
+                client.subscribe(TOPICS.clients);
+                
+                // Request initial status
+                setTimeout(() => sendCommand('status'), 1000);
+            });
+
+            client.on('message', (topic, message) => {
+                try {
+                    const data = JSON.parse(message.toString());
+                    handleMessage(topic, data);
+                } catch(e) {
+                    console.error("Parse error:", e);
+                }
+            });
+
+            client.on('error', (err) => {
+                console.error("MQTT Error:", err);
+                isConnected = false;
+                updateMQTTStatus(false, "Connection Error");
+                showToast("MQTT Connection Error! Check credentials.", "error");
+            });
+
+            client.on('close', () => {
+                console.log("MQTT Disconnected");
+                isConnected = false;
+                updateMQTTStatus(false, "Disconnected - Reconnecting...");
+            });
+        }
+
+        // ============================================================
+        // Handle Incoming Messages
+        // ============================================================
+        function handleMessage(topic, data) {
+            console.log(`📨 Received on ${topic}:`, data);
+            
+            // Update device status indicator
+            document.getElementById('deviceLed').className = 'led-indicator connected';
+            document.getElementById('deviceStatus').innerHTML = '✅ ESP Connected';
+            
+            switch(topic) {
+                case TOPICS.status:
+                    updateStatusUI(data);
+                    break;
+                case TOPICS.motion:
+                    updateMotionUI(data);
+                    break;
+                case TOPICS.alarm:
+                    alarmCount++;
+                    document.getElementById('alarmCount').textContent = alarmCount;
+                    showToast("⚠️ MOTION DETECTED! Alarm triggered!", "alert");
+                    // Play sound alert
+                    playAlertSound();
+                    break;
+                case TOPICS.clients:
+                    updateClientsUI(data);
+                    break;
+            }
+            
+            // Update last update time
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = now.toLocaleTimeString();
+        }
+
+        // ============================================================
+        // Update UI Functions
+        // ============================================================
+        function updateStatusUI(data) {
+            deviceId = data.deviceId || "Unknown";
+            document.getElementById('deviceId').textContent = deviceId;
+            document.getElementById('deviceInfo').innerHTML = `🆔 Device: ${deviceId} | 🌐 Online`;
+            
+            // Update LED bulb
+            const ledBulb = document.getElementById('ledBulb');
+            if (data.ledState) {
+                ledBulb.className = 'led-bulb on';
+            } else {
+                ledBulb.className = 'led-bulb';
+            }
+            
+            // Update uptime
+            const hours = Math.floor(data.uptime / 3600);
+            const minutes = Math.floor((data.uptime % 3600) / 60);
+            const seconds = data.uptime % 60;
+            document.getElementById('uptime').textContent = `${hours}h ${minutes}m ${seconds}s`;
+            
+            // Update free heap
+            if (data.freeHeap) {
+                document.getElementById('freeHeap').textContent = (data.freeHeap / 1024).toFixed(1);
+            }
+            
+            // Update alarm count
+            if (data.totalAlarms !== undefined) {
+                alarmCount = data.totalAlarms;
+                document.getElementById('alarmCount').textContent = alarmCount;
+            }
+            
+            // Update motion status if present
+            if (data.motion !== undefined) {
+                updateMotionUI({ motion: data.motion });
+            }
+        }
+
+        function updateMotionUI(data) {
+            const motionIcon = document.getElementById('motionIcon');
+            const motionText = document.getElementById('motionText');
+            
+            if (data.motion) {
+                motionIcon.className = 'motion-icon detected';
+                motionText.className = 'motion-text detected';
+                motionText.textContent = '⚠️ MOTION DETECTED!';
+                lastMotionTime = new Date();
+            } else {
+                motionIcon.className = 'motion-icon';
+                motionText.className = 'motion-text clear';
+                motionText.textContent = 'No Motion';
+            }
+            
+            if (lastMotionTime) {
+                document.getElementById('lastMotionTime').innerHTML = `Last motion: ${lastMotionTime.toLocaleTimeString()}`;
+            }
+        }
+
+        function updateClientsUI(data) {
+            const clients = data.clients || [];
+            const clientCount = data.totalClients || clients.length;
+            
+            document.getElementById('clientCount').textContent = clientCount;
+            
+            const tbody = document.getElementById('clientsBody');
+            if (clients.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;">No devices connected</td></tr>';
+            } else {
+                tbody.innerHTML = clients.map(c => `
+                    <tr>
+                        <td>📱 ${c.ip}</td>
+                        <td>${c.time || 'Connected'}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        function updateMQTTStatus(connected, message) {
+            const led = document.getElementById('mqttLed');
+            const status = document.getElementById('mqttStatus');
+            
+            if (connected) {
+                led.className = 'led-indicator connected';
+                status.innerHTML = `🌍 ${message}`;
+            } else {
+                led.className = 'led-indicator disconnected';
+                status.innerHTML = `⚠️ ${message}`;
+            }
+        }
+
+        // ============================================================
+        // Send Command to ESP
+        // ============================================================
+        function sendCommand(command) {
+            if (!client || !isConnected) {
+                showToast("Not connected to MQTT! Please wait...", "warning");
+                return;
+            }
+            
+            const message = JSON.stringify({
+                command: command,
+                timestamp: Date.now(),
+                source: "web_remote"
+            });
+            
+            client.publish(TOPICS.command, message);
+            console.log(`📤 Command sent: ${command}`);
+            showToast(`Command sent: ${command}`, "info");
+            
+            // Visual feedback on button
+            const btns = document.querySelectorAll('.btn');
+            btns.forEach(btn => {
+                if (btn.innerText.includes(command.replace('_', ' ').toUpperCase())) {
+                    const originalText = btn.innerHTML;
+                    btn.innerHTML = '✓ Sent!';
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                    }, 1000);
+                }
+            });
+        }
+
+        function refreshStatus() {
+            if (client && isConnected) {
+                sendCommand('status');
+                showToast("Requesting status update...", "info");
+            } else {
+                showToast("Not connected! Trying to reconnect...", "warning");
+                connectMQTT();
+            }
+        }
+
+        // ============================================================
+        // UI Helpers
+        // ============================================================
+        function showToast(message, type = 'info') {
+            // Remove existing toast
+            const existingToast = document.querySelector('.toast');
+            if (existingToast) existingToast.remove();
+            
+            // Create new toast
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.style.background = type === 'error' ? 'rgba(244,67,54,0.9)' : 
+                                     type === 'success' ? 'rgba(76,175,80,0.9)' :
+                                     type === 'warning' ? 'rgba(255,152,0,0.9)' :
+                                     'rgba(0,0,0,0.8)';
+            toast.innerHTML = message;
+            document.body.appendChild(toast);
+            
+            // Auto remove after 3 seconds
+            setTimeout(() => {
+                if (toast) toast.remove();
+            }, 3000);
+        }
+
+        function playAlertSound() {
+            try {
+                const audio = new Audio('data:audio/wav;base64,U3RlYWx0aCBzb3VuZA==');
+                audio.play().catch(e => console.log("Audio not supported"));
+            } catch(e) {}
+        }
+
+        // ============================================================
+        // Auto-reconnect and Heartbeat
+        // ============================================================
+        let reconnectAttempts = 0;
+        
+        function checkConnection() {
+            if (!client || !isConnected) {
+                reconnectAttempts++;
+                if (reconnectAttempts > 3) {
+                    document.getElementById('deviceStatus').innerHTML = '⚠️ ESP Offline';
+                    document.getElementById('deviceLed').className = 'led-indicator disconnected';
+                    showToast("Device offline! Check ESP power and WiFi.", "warning");
+                }
+            } else {
+                reconnectAttempts = 0;
+            }
+        }
+        
+        // Request status every 30 seconds
+        setInterval(() => {
+            if (client && isConnected) {
+                sendCommand('status');
+            }
+            checkConnection();
+        }, 30000);
+
+        // ============================================================
+        // Initialize
+        // ============================================================
+        console.log("🚀 Ngapo Home Smart Remote Control");
+        console.log("MQTT Broker:", MQTT_CONFIG.broker);
+        console.log("Username:", MQTT_CONFIG.username);
+        
+        connectMQTT();
+        
+        // Display connection info
+        document.getElementById('globalStatus').innerHTML = '🟢 Connected to Cloud';
+    </script>
+</body>
+</html>
